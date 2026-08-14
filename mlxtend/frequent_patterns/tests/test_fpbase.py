@@ -1,4 +1,4 @@
-# Sebastian Raschka 2014-2024
+# Sebastian Raschka 2014-2026
 # mlxtend Machine Learning Library Extensions
 # Author: Sebastian Raschka <sebastianraschka.com>
 #
@@ -324,6 +324,19 @@ class FPTestEx3All(FPTestEx3):
             self.fpalgo,
             self.df,
             min_support=0.0,
+        )
+
+    def test_output4_min_support_above_one_issue_864(self):
+        # Regression test for #864: min_support is a fraction in (0, 1].
+        # Values > 1 used to pass silently, returning an empty result;
+        # they now raise the same ValueError as min_support <= 0.
+        assert_raises(
+            ValueError,
+            "`min_support` must be a positive "
+            "number within the interval `(0, 1]`. Got 2.",
+            self.fpalgo,
+            self.df,
+            min_support=2,
         )
 
 

@@ -1,4 +1,4 @@
-# Sebastian Raschka 2014-2024
+# Sebastian Raschka 2014-2026
 # mlxtend Machine Learning Library Extensions
 #
 # Algorithm for exhaustive feature selection.
@@ -20,6 +20,7 @@ import scipy.stats
 from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator, MetaEstimatorMixin, clone
 from sklearn.metrics import get_scorer
+from sklearn.utils._tags import get_tags
 
 from ..externals.name_estimators import _name_estimators
 from .utilities import _calc_score, _get_featurenames, _merge_lists, _preprocess
@@ -207,14 +208,22 @@ class ExhaustiveFeatureSelector(BaseEstimator, MetaEstimatorMixin):
 
         self.scoring = scoring
         if self.scoring is None:
-            if not hasattr(self.est_, "_estimator_type"):
+            try:
+                est_type = get_tags(self.est_).estimator_type
+            except Exception:
+                est_type = getattr(self.est_, "_estimator_type", None)
+            else:
+                if est_type is None:
+                    est_type = getattr(self.est_, "_estimator_type", None)
+
+            if est_type is None:
                 raise AttributeError(
                     "Estimator must have an ._estimator_type for infering `scoring`"
                 )
 
-            if self.est_._estimator_type == "classifier":
+            if est_type == "classifier":
                 self.scoring = "accuracy"
-            elif self.est_._estimator_type == "regressor":
+            elif est_type == "regressor":
                 self.scoring = "r2"
             else:
                 raise AttributeError("Estimator must be a Classifier or Regressor.")
@@ -483,7 +492,11 @@ class ExhaustiveFeatureSelector(BaseEstimator, MetaEstimatorMixin):
         return self
 
     def finalize_fit(self):
-        max_score = np.NINF
+        if np.__version__ < "2.0":
+            ninf = np.NINF
+        else:
+            ninf = -np.inf
+        max_score = ninf
         for c in self.subsets_:
             if self.subsets_[c]["avg_score"] > max_score:
                 best_subset = c
@@ -543,7 +556,7 @@ class ExhaustiveFeatureSelector(BaseEstimator, MetaEstimatorMixin):
         self.fit(X, y, groups=groups, **fit_params)
         return self.transform(X)
 
-    def get_metric_dict(self, confidence_interval=0.95):
+    def get_metric_dict(self, confidence_interval=0.95, top_k=None):
         """Return metric dictionary
 
         Parameters
@@ -551,6 +564,17 @@ class ExhaustiveFeatureSelector(BaseEstimator, MetaEstimatorMixin):
         confidence_interval : float (default: 0.95)
             A positive float between 0.0 and 1.0 to compute the confidence
             interval bounds of the CV score averages.
+        top_k : int or None (default: None)
+            If a positive integer, restrict the returned dictionary to the
+            top-`top_k` feature subsets ranked by `avg_score` descending.
+            ExhaustiveFeatureSelector can produce a very large number of
+            evaluated subsets, and downstream consumers (notably
+            ``pd.DataFrame.from_dict(..., orient='index')``) often only need
+            the highest-scoring entries. ``top_k`` lets callers cap the
+            returned dictionary before such conversions without
+            re-implementing the ranking themselves (issue #610).
+            ``None`` (default) preserves the historical behaviour and
+            returns all subsets.
 
         Returns
         ----------
@@ -567,7 +591,22 @@ class ExhaustiveFeatureSelector(BaseEstimator, MetaEstimatorMixin):
 
         """
         self._check_fitted()
-        fdict = deepcopy(self.subsets_)
+        if top_k is not None:
+            if not isinstance(top_k, (int, np.integer)) or top_k <= 0:
+                raise ValueError(
+                    "`top_k` must be a positive integer or None. " "Got %r." % (top_k,)
+                )
+            # Preserve the original iteration keys so downstream code can
+            # still cross-reference `subsets_` using the same keys.
+            subset_keys = sorted(
+                self.subsets_,
+                key=lambda k: self.subsets_[k]["avg_score"],
+                reverse=True,
+            )[:top_k]
+            fdict = {k: deepcopy(self.subsets_[k]) for k in subset_keys}
+        else:
+            fdict = deepcopy(self.subsets_)
+
         for k in fdict:
             std_dev = np.std(self.subsets_[k]["cv_scores"])
             bound, std_err = self._calc_confidence(

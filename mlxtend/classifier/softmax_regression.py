@@ -1,4 +1,4 @@
-# Sebastian Raschka 2014-2024
+# Sebastian Raschka 2014-2026
 # mlxtend Machine Learning Library Extensions
 #
 # Implementation of the mulitnomial logistic regression algorithm for
@@ -141,7 +141,7 @@ class SoftmaxRegression(_BaseModel, _IterativeModel, _Classifier, _MultiClass):
             )
             self.cost_ = []
 
-        y_enc = self._one_hot(y=y, n_labels=self.n_classes, dtype=np.float_)
+        y_enc = self._one_hot(y=y, n_labels=self.n_classes, dtype=np.float64)
 
         self.init_time_ = time()
         rgen = np.random.RandomState(self.random_seed)

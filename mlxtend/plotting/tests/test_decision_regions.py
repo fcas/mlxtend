@@ -1,4 +1,4 @@
-# Sebastian Raschka 2014-2024
+# Sebastian Raschka 2014-2026
 # mlxtend Machine Learning Library Extensions
 # Author: Sebastian Raschka <sebastianraschka.com>
 #
@@ -94,7 +94,7 @@ def test_y_int_ary():
         "Try passing the array as y.astype(np.int_)",
         plot_decision_regions,
         X[:, :2],
-        y.astype(np.float_),
+        y.astype(np.float64),
         sr,
     )
 

@@ -1,4 +1,4 @@
-# Sebastian Raschka 2014-2024
+# Sebastian Raschka 2014-2026
 # mlxtend Machine Learning Library Extensions
 #
 # Algorithm for sequential feature selection.
@@ -18,6 +18,7 @@ import scipy.stats
 from joblib import Parallel, delayed
 from sklearn.base import MetaEstimatorMixin, clone
 from sklearn.metrics import get_scorer
+from sklearn.utils._tags import get_tags
 
 from ..externals.name_estimators import _name_estimators
 from ..utils.base_compostion import _BaseXComposition
@@ -196,12 +197,14 @@ class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):
         clone_estimator=True,
         fixed_features=None,
         feature_groups=None,
+        tol=None,
     ):
         self.estimator = estimator
         self.k_features = k_features
         self.forward = forward
         self.floating = floating
         self.pre_dispatch = pre_dispatch
+        self.tol = tol
         # Want to raise meaningful error message if a
         # cross-validation generator is inputted
         if isinstance(cv, types.GeneratorType):
@@ -225,14 +228,21 @@ class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):
 
         self.scoring = scoring
         if self.scoring is None:
-            if not hasattr(self.est_, "_estimator_type"):
+            try:
+                est_type = get_tags(self.est_).estimator_type
+            except Exception:
+                est_type = getattr(self.est_, "_estimator_type", None)
+            else:
+                if est_type is None:
+                    est_type = getattr(self.est_, "_estimator_type", None)
+
+            if est_type is None:
                 raise AttributeError(
                     "Estimator must have an ._estimator_type for infering `scoring`"
                 )
-
-            if self.est_._estimator_type == "classifier":
+            if est_type == "classifier":
                 self.scoring = "accuracy"
-            elif self.est_._estimator_type == "regressor":
+            elif est_type == "regressor":
                 self.scoring = "r2"
             else:
                 raise AttributeError("Estimator must be a Classifier or Regressor.")
@@ -561,6 +571,13 @@ class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):
                         "avg_score": k_score,
                     }
 
+                if self.tol is not None and k > 1:
+                    prev_k = k - 1 if self.forward else k + 1
+                    if prev_k in self.subsets_:
+                        diff = k_score - self.subsets_[prev_k]["avg_score"]
+                        if diff < self.tol:
+                            k_stop = k
+
                 if self.floating:
                     # floating direction is opposite of self.forward, i.e. in
                     # forward selection, we do floating in backward manner,
@@ -651,7 +668,11 @@ class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):
         return self
 
     def finalize_fit(self):
-        max_score = np.NINF
+        if np.__version__ < "2.0":
+            ninf = np.NINF
+        else:
+            ninf = -np.inf
+        max_score = ninf
         for k in self.subsets_:
             if (
                 k >= self.min_k
@@ -662,7 +683,7 @@ class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):
                 best_subset = k
 
         k_score = max_score
-        if k_score == np.NINF:
+        if k_score == ninf:
             # i.e. all keys of self.subsets_ are not in interval `[self.min_k, self.max_k]`
             # this happens if KeyboardInterrupt happens
             keys = list(self.subsets_.keys())

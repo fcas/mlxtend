@@ -9,7 +9,9 @@ import math
 from ..frequent_patterns import fpcommon as fpc
 
 
-def fpgrowth(df, min_support=0.5, use_colnames=False, max_len=None, verbose=0):
+def fpgrowth(
+    df, min_support=0.5, null_values=False, use_colnames=False, max_len=None, verbose=0
+):
     """Get frequent itemsets from a one-hot DataFrame
 
     Parameters
@@ -42,6 +44,9 @@ def fpgrowth(df, min_support=0.5, use_colnames=False, max_len=None, verbose=0):
       The support is computed as the fraction
       transactions_where_item(s)_occur / total_transactions.
 
+    null_values : bool (default: False)
+      In case there are null values as NaNs in the original input data
+
     use_colnames : bool (default: False)
       If true, uses the DataFrames' column names in the returned DataFrame
       instead of column indices.
@@ -70,9 +75,9 @@ def fpgrowth(df, min_support=0.5, use_colnames=False, max_len=None, verbose=0):
     https://rasbt.github.io/mlxtend/user_guide/frequent_patterns/fpgrowth/
 
     """
-    fpc.valid_input_check(df)
+    fpc.valid_input_check(df, null_values)
 
-    if min_support <= 0.0:
+    if min_support <= 0.0 or min_support > 1.0:
         raise ValueError(
             "`min_support` must be a positive "
             "number within the interval `(0, 1]`. "
@@ -83,11 +88,19 @@ def fpgrowth(df, min_support=0.5, use_colnames=False, max_len=None, verbose=0):
     if use_colnames:
         colname_map = {idx: item for idx, item in enumerate(df.columns)}
 
-    tree, _ = fpc.setup_fptree(df, min_support)
+    tree, disabled, _ = fpc.setup_fptree(df, min_support, null_values=null_values)
     minsup = math.ceil(min_support * len(df.index))  # min support as count
     generator = fpg_step(tree, minsup, colname_map, max_len, verbose)
 
-    return fpc.generate_itemsets(generator, len(df.index), colname_map)
+    return fpc.generate_itemsets(
+        generator,
+        df,
+        disabled,
+        min_support,
+        len(df.index),
+        colname_map,
+        null_values=null_values,
+    )
 
 
 def fpg_step(tree, minsup, colnames, max_len, verbose):

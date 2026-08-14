@@ -1,4 +1,4 @@
-# Sebastian Raschka 2014-2024
+# Sebastian Raschka 2014-2026
 # mlxtend Machine Learning Library Extensions
 # Author: Sebastian Raschka <sebastianraschka.com>
 #
@@ -36,6 +36,18 @@ def test_check_Xy_float16_X():
 
 def test_check_Xy_float16_y():
     check_Xy(X, y.astype(np.int16))
+
+
+def test_check_Xy_float_y_allowed_if_y_int_false():
+    check_Xy(X, y.astype(float), y_int=False)
+
+
+def test_check_Xy_float_y_rejected_if_y_int_true():
+    expect = (
+        "y must be an integer array. Found float64. "
+        "Try passing the array as y.astype(np.int_)"
+    )
+    assert_raises(ValueError, expect, check_Xy, X, y.astype(float), y_int=True)
 
 
 def test_check_Xy_invalid_type_y():
